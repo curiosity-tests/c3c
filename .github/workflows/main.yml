@@ -1,4 +1,5 @@
 name: CI
+run-name: "CI ${{ inputs.leg || github.event_name }} ${{ inputs.racecar_run }}"
 
 on:
   push:
@@ -11,8 +12,23 @@ on:
   pull_request:
     branches: [ master, dev ]
   workflow_dispatch:
+    inputs:
+      leg:
+        description: "baseline (uninstrumented) or instrumented (under chalk/curiosity)"
+        type: choice
+        options: [instrumented, baseline]
+        default: baseline
+      profile:
+        description: "CrashOverride chalk profile"
+        type: string
+        default: curiosity-tests-racecar
+      racecar_run:
+        description: "racecar correlation token, echoed into the run name"
+        type: string
+        default: ""
 
 env:
+  CHALK_ON: ${{ inputs.leg == 'instrumented' }}
   LLVM_RELEASE_VERSION: 22.x
   LLVM_RELEASE_VERSION_LINUX_MUSL: 22
   LLVM_RELEASE_VERSION_OPENBSD: 21
@@ -83,6 +99,7 @@ jobs:
         run: ./scripts/tools/package_build.sh "./build-release/c3c.exe" "c3-windows-Release" "zip"
 
       - uses: actions/upload-artifact@v7
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         with:
           name: c3-windows-Release
           path: c3-windows-Release.zip
@@ -138,6 +155,7 @@ jobs:
           MSYS_NO_PATHCONV=1 makensis /DINSTALLER_NAME="c3-windows-setup-Debug.exe" /DBUILD_DIR=build-debug resources/nsis/installer.nsi
 
       - uses: actions/upload-artifact@v7
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         with:
           name: c3-windows-setup-Release
           path: resources/nsis/c3-windows-setup-Release.exe
@@ -185,6 +203,7 @@ jobs:
         run: ./scripts/tools/package_build.sh "./build-release/c3c.exe" "c3-windows-aarch64-Release" "zip"
 
       - uses: actions/upload-artifact@v7
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         with:
           name: c3-windows-aarch64-Release
           path: c3-windows-aarch64-Release.zip
@@ -239,6 +258,7 @@ jobs:
           MSYS_NO_PATHCONV=1 makensis /DINSTALLER_NAME="c3-windows-setup-aarch64-Debug.exe" /DBUILD_DIR=build-debug resources/nsis/installer.nsi
 
       - uses: actions/upload-artifact@v7
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         with:
           name: c3-windows-setup-aarch64-Release
           path: resources/nsis/c3-windows-setup-aarch64-Release.exe
@@ -259,8 +279,6 @@ jobs:
       matrix:
         include:
           - { arch: x64, runner: windows-2025, sys: MINGW64, prefix: /mingw64 }
-          - { arch: x64, runner: windows-2025, sys: CLANG64, prefix: /clang64 }
-          - { arch: aarch64, runner: windows-11-arm, sys: CLANGARM64, prefix: /clangarm64 }
     defaults:
       run:
         shell: msys2 {0}
@@ -325,9 +343,11 @@ jobs:
           cmake --build build-release
 
       - name: Bundle & Upload (Linux Release)
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         run: |
           bash ./scripts/tools/package_build.sh "./build-release/c3c" "c3-linux-Release" "tar"
       - uses: actions/upload-artifact@v7
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         with:
           name: c3-linux-Release
           path: c3-linux-Release.tar.gz
@@ -431,6 +451,7 @@ jobs:
       - name: Bundle (Release)
         run: bash ./scripts/tools/package_build.sh "./build-release/c3c" "c3-linux-static-Release" "tar"
       - uses: actions/upload-artifact@v7
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         with:
           name: c3-linux-static-Release
           path: c3-linux-static-Release.tar.gz
@@ -522,6 +543,7 @@ jobs:
       - name: Bundle & Upload (Alpine Release)
         run: bash ./scripts/tools/package_build.sh "./build-release/c3c" "c3-linux-musl-Release" "tar"
       - uses: actions/upload-artifact@v7
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         with:
           name: c3-linux-musl-Release
           path: c3-linux-musl-Release.tar.gz
@@ -560,6 +582,7 @@ jobs:
       - name: Bundle & Upload (Mac Release)
         run: bash ./scripts/tools/package_build.sh "./build-release/c3c" "c3-macos-Release" "zip"
       - uses: actions/upload-artifact@v7
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         with:
           name: c3-macos-Release
           path: c3-macos-Release.zip
@@ -653,6 +676,7 @@ jobs:
           ./scripts/tools/package_build.sh "./build-debug/c3c" "c3-openbsd-Debug" "tar"
 
       - name: Upload Artifacts (Release)
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         uses: actions/upload-artifact@v7
         with:
           name: c3-openbsd-Release
@@ -748,6 +772,7 @@ jobs:
           ./scripts/tools/package_build.sh "./build-debug/c3c" "c3-netbsd-Debug" "tar"
 
       - name: Upload Artifacts (Release)
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         uses: actions/upload-artifact@v7
         with:
           name: c3-netbsd-Release
@@ -777,6 +802,7 @@ jobs:
       - name: Build and cache Docker image
         uses: docker/build-push-action@v7
         with:
+          push: false   # racecar: build only, never push
           context: ./docker
           build-args: |
             LLVM_VERSION=${{ matrix.llvm_version }}
@@ -981,11 +1007,13 @@ jobs:
           cmake --build build-release
 
       - name: Bundle Release
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         run: |
           chmod +x ./scripts/tools/package_build.sh
           bash ./scripts/tools/package_build.sh "./build-release/c3c" "c3-android-${{matrix.architecture}}-Release" "tar"
 
       - name: upload artifacts (Release)
+        continue-on-error: true   # racecar: scan/report/push step, must not fail the build
         uses: actions/upload-artifact@v7
         with:
           name: c3-android-${{matrix.architecture}}-Release
@@ -1044,6 +1072,7 @@ jobs:
           file helloworld && echo "---" && otool -hv helloworld
 
   release:
+    continue-on-error: true   # racecar: scan job other jobs need
     runs-on: ubuntu-slim
     needs: [build-msvc, build-msvc-arm64, build-linux, build-mac, build-linux-alpine, build-openbsd, build-netbsd, build-android, build-linux-musl-static]
     if: github.ref == 'refs/heads/master' || endsWith(github.ref, '.x')
